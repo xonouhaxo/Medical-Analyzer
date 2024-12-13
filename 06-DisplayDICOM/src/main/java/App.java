@@ -6,6 +6,7 @@ import org.apache.commons.math3.linear.RealMatrix;
 import org.dcm4che3.data.Tag;
 import org.json.JSONObject;
 
+import java.awt.image.BufferedImage;
 import java.io.IOException;
 
 /**
@@ -36,8 +37,45 @@ public class App {
      **/
     public static void renderDicom(HttpExchange exchange,
                                    DicomImage dicom) throws IOException {
-        // TODO
-        HttpToolbox.sendNotFound(exchange);
+        try {
+            if (dicom.isGrayscale()) {
+                RealMatrix grayscaleData = dicom.getFloatPixelData();
+                int height = grayscaleData.getRowDimension();
+                int width = grayscaleData.getColumnDimension();
+
+                double minPixelValue = Double.POSITIVE_INFINITY;
+                double maxPixelValue = Double.NEGATIVE_INFINITY;
+
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        double pixel = grayscaleData.getEntry(y, x);
+                        minPixelValue = Math.min(minPixelValue, pixel);
+                        maxPixelValue = Math.max(maxPixelValue, pixel);
+                    }
+                }
+
+                double range = maxPixelValue - minPixelValue;
+
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        double originalPixel = grayscaleData.getEntry(y, x);
+                        int normalizedPixel = (int) ((originalPixel - minPixelValue) / range * 255);
+                        normalizedPixel = Math.max(0, Math.min(255, normalizedPixel));
+                        grayscaleData.setEntry(y, x, normalizedPixel);
+                    }
+                }
+
+                DicomImage.sendImageToJavaScript(exchange, grayscaleData);
+
+            } else {
+                BufferedImage colorPixelData = dicom.getColorPixelData();
+                HttpToolbox.sendImageToJavaScript(exchange, colorPixelData);
+            }
+        } catch (IllegalArgumentException e) {
+            HttpToolbox.sendBadRequest(exchange);
+        } catch (Exception e) {
+            HttpToolbox.sendInternalServerError(exchange);
+        }
     }
 
     /**
@@ -51,7 +89,20 @@ public class App {
      **/
     public static void parseTags(HttpExchange exchange,
                                  DicomImage dicom) throws IOException {
-        // TODO
-        HttpToolbox.sendNotFound(exchange);
+        try {
+            String patientName = dicom.getDataset().getString(Tag.PatientName);
+            String studyDescription = dicom.getDataset().getString(Tag.StudyDescription);
+
+            patientName = (patientName != null) ? patientName : "None";
+            studyDescription = (studyDescription != null) ? studyDescription : "None";
+
+            JSONObject response = new JSONObject();
+            response.put("patient-name", patientName);
+            response.put("study-description", studyDescription);
+
+            HttpToolbox.sendResponse(exchange, response);
+        } catch (Exception exception) {
+            HttpToolbox.sendInternalServerError(exchange);
+        }
     }
 }
