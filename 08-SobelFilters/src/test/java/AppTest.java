@@ -166,6 +166,7 @@ public class AppTest {
         RealMatrix c = App.sobelX(m);
         assertEquals(1, c.getColumnDimension());
         assertEquals(1, c.getRowDimension());
+        System.out.println(c);
         assertEquals(18.0, c.getEntry(0, 0), 0.0001);
 
         c = App.sobelY(m);
